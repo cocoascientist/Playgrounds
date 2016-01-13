@@ -20,7 +20,7 @@ extension NSDate {
     
     public func moonPhase() -> Double {
         let julianDate = kEpochJulianDate + self.timeIntervalSince1970 / kSecondsPerDay
-        var phase = (julianDate + 4.867) / kLunarSynodicPeriod
+        let phase = (julianDate + 4.867) / kLunarSynodicPeriod
         return (phase - floor(phase))
     }
     
@@ -57,7 +57,7 @@ class MoonView: UIView {
     
     required init(coder aDecoder: NSCoder) {
         self.date = NSDate()
-        super.init(coder: aDecoder)
+        super.init(coder: aDecoder)!
     }
     
 //: Next override and implement `drawRect:` to perform the drawing. The code drawing is port from a [Visual Basic example](http://www.codeproject.com/Articles/100174/Calculate-and-Draw-Moon-Phase) and modified to use Core Graphics. 
@@ -139,5 +139,5 @@ let date = dateFormatter.dateFromString("10/05/2023")
 let futureMoon = MoonView(frame: CGRectMake(0, 0, 200, 200), date: date!)
 
 //: That's it!
+XCPlaygroundPage.currentPage.liveView = todaysMoon
 
-XCPShowView("Moon phase for \(dateFormatter.stringFromDate(NSDate()))", todaysMoon)

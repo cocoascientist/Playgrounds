@@ -18,7 +18,7 @@ public class LocationTracker: NSObject, CLLocationManagerDelegate {
     public typealias Observer = (location: LocationResult) -> ()
     
     /// The last location result received. Initially the location is unknown.
-    private var lastResult: LocationResult = .Failure(.UnknownLocation)
+    private var lastResult: LocationResult = .Failure(LocationError.UnknownLocation)
     
     /// The collection of location observers
     private var observers: [Observer] = []
@@ -35,20 +35,14 @@ public class LocationTracker: NSObject, CLLocationManagerDelegate {
     Type representing either a Location or a Reason the location could not be determined.
     
     - Success: A successful result with a valid Location.
-    - Failure: An unsuccessful result with a Reason for failure.
+    - Failure: An unsuccessful result
     */
     public enum LocationResult {
         case Success(Location)
-        case Failure(Reason)
+        case Failure(ErrorType)
     }
     
-    /**
-    Type representing either an unknown location or an NSError describing why the location failed.
-    
-    - UnknownLocation: The location is unknown because it has not been determined yet.
-    - Other: The NSError describing why the location could not be determined.
-    */
-    public enum Reason {
+    enum LocationError: ErrorType {
         case UnknownLocation
         case Other(NSError)
     }
@@ -111,21 +105,21 @@ public class LocationTracker: NSObject, CLLocationManagerDelegate {
     
     // MARK: - CLLocationManagerDelegate
     
-    public func locationManager(manager: CLLocationManager!, didChangeAuthorizationStatus status: CLAuthorizationStatus) {
+    public func locationManager(manager: CLLocationManager, didChangeAuthorizationStatus status: CLAuthorizationStatus) {
         locationManager.startUpdatingLocation()
     }
     
-    public func locationManager(manager: CLLocationManager!, didFailWithError error: NSError!) {
-        let result = LocationResult.Failure(Reason.Other(error))
+    public func locationManager(manager: CLLocationManager, didFailWithError error: NSError) {
+        let result = LocationResult.Failure(LocationError.Other(error))
         self.publishChangeWithResult(result)
         self.lastResult = result
     }
     
-    public func locationManager(manager: CLLocationManager!, didUpdateLocations locations: [AnyObject]!) {
+    public func locationManager(manager: CLLocationManager, didUpdateLocations locations: [AnyObject]) {
         if let currentLocation = locations.first as? CLLocation {
             if shouldUpdateWithLocation(currentLocation) {
                 CLGeocoder().reverseGeocodeLocation(currentLocation, completionHandler: { (placemarks, error) -> Void in
-                    if let placemark = placemarks?.first as? CLPlacemark {
+                    if let placemark = placemarks?.first {
                         if let city = placemark.locality {
                             if let state = placemark.administrativeArea {
                                 if let neighborhood = placemark.subLocality {
@@ -139,7 +133,7 @@ public class LocationTracker: NSObject, CLLocationManagerDelegate {
                         }
                     }
                     else {
-                        let result = LocationResult.Failure(Reason.Other(error))
+                        let result = LocationResult.Failure(LocationError.Other(error!))
                         self.publishChangeWithResult(result)
                         self.lastResult = result
                     }
@@ -160,7 +154,7 @@ public class LocationTracker: NSObject, CLLocationManagerDelegate {
     }()
     
     private func publishChangeWithResult(result: LocationResult) {
-        observers.map { (observer) -> Void in
+        for observer in observers {
             observer(location: result)
         }
     }

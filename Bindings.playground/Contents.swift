@@ -46,7 +46,8 @@ class BondBox<T> {
 var name: Dynamic<String>? = Dynamic("")
 
 let observer = { (name: String) -> Void in
-    println("name is now \(name)")
+    let n = name
+    print("name is now \(n)")
 }
 
 let nameBond = Bond(observer)

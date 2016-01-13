@@ -51,7 +51,8 @@ class Bond<T: AnyObject, U>: Invocable, Disposable {
 
 class SomeObserver {
     func someEventHandler(data: String) {
-        println(data)
+        let _ = "something"
+        print(data)
     }
 }
 

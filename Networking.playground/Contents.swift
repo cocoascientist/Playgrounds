@@ -1,200 +1,208 @@
-//: # Networking with `NSURLSession`
-//:
-//: Let's use `NSURLSession` to make some simple `GET` requests.
-
-//: `NSURLSession` is part of Foundation.
-
 import Foundation
 
-//: We need `XCPlayground` to allow to playground execution of asynchronous tasks. Without it, the playground would make the network request and terminate before the request returned. By calling `XCPSetExecutionShouldContinueIndefinitely()`, we specify the playground should continue running so the request can be received.
+// Result
 
-import XCPlayground
-
-XCPSetExecutionShouldContinueIndefinitely()
-
-//: Next we begin creating some types for handling responses, starting with a generic `Box` type. With enums, associated values need a fixed sized. This means we cannot have generic parameters, which have an unknown size. To get around this, can create a `Box` class that wraps a generic value.
-
-public class Box<T> {
-    public let unbox: T
-    public init(_ value: T) {
-        self.unbox = value
-    }
-}
-
-//: Define a Result enum to represent the result of some operation. Here we use the `Box` type to wrap a successful result.
-
-public enum Result<T> {
-    case Success(Box<T>)
-    case Failure(Reason)
-}
-
-//: When it comes to modeling a result failure, we use a `Reason` type. The reasons for failure can be adapted for different use cases, with a `.Other` error case returning a general `NSError`.
-
-public enum Reason {
-    case BadResponse
-    case NoData
-    case NoSuccessStatusCode(statusCode: Int)
-    case Other(NSError)
-}
-
-//: Define the OpenWeather API
-
-enum OpenWeatherMap {
-    case CityID(Int)
-}
-
-extension OpenWeatherMap {
-    var path: String {
-        let baseURL = "http://api.openweathermap.org/data/2.5"
-        
-        switch self {
-        case .CityID(let id):
-            return "\(baseURL)/weather?id=\(id)"
-        }
-    }
-}
-
-extension OpenWeatherMap {
-    func request() -> NSURLRequest {
-        let url = NSURL(string: self.path)
-        return NSURLRequest(URL: url!)
-    }
-}
-
-let seattleID = 5809844
-
-//: Define a `Weather` model object and JSON transformation
-
-struct Weather {
-    let name: String
+protocol ResultType {
+    typealias Value
     
-    init(name: String) {
-        self.name = name
+    init(success: Value)
+    init(failure: ErrorType)
+    
+    func map<U>(f: (Value) -> U) -> Result<U>
+    func flatMap<U>(f: Value -> Result<U>) -> Result<U>
+}
+
+public enum Result<T>: ResultType {
+    case Success(T)
+    case Failure(ErrorType)
+    
+    init(success value: T) {
+        self = .Success(value)
+    }
+    
+    init(failure error: ErrorType) {
+        self = .Failure(error)
     }
 }
 
-extension Weather {
-    static func weatherFromJSON(json: JSON) -> Weather? {
-        if let name = json["name"] as? String {
-            let weather = Weather(name: name)
-            return weather
+extension Result {
+    func map<U>(f: T -> U) -> Result<U> {
+        switch self {
+        case let .Success(value):
+            return Result<U>.Success(f(value))
+        case let .Failure(error):
+            return Result<U>.Failure(error)
         }
-        
-        return nil
+    }
+    
+    func flatMap<U>(f: T -> Result<U>) -> Result<U> {
+        return Result.flatten(map(f))
+    }
+    
+    static func flatten<U>(result: Result<Result<U>>) -> Result<U> {
+        switch result {
+        case let .Success(innerResult):
+            return innerResult
+        case let .Failure(error):
+            return Result<U>.Failure(error)
+        }
     }
 }
 
-//: For handling JSON, define an extension on `NSData` and some typealiases.
+// NSData+JSON
+
+public enum JSONError: ErrorType {
+    case BadJSON
+    case NoJSON
+}
 
 typealias JSON = [String: AnyObject]
 typealias JSONResult = Result<JSON>
 
 extension NSData {
     func toJSON() -> JSONResult {
-        var error : NSError?
-        if let jsonObject = NSJSONSerialization.JSONObjectWithData(self, options: nil, error: &error) as? JSON {
-            return Result.Success(Box(jsonObject))
+        do {
+            let obj = try NSJSONSerialization.JSONObjectWithData(self, options: [])
+            guard let json = obj as? JSON else { return .Failure(JSONError.NoJSON) }
+            return .Success(json)
         }
-        else if error != nil {
-            return Result.Failure(Reason.Other(error!))
-        }
-        else {
-            return Result.Failure(Reason.NoData)
+        catch {
+            return .Failure(JSONError.BadJSON)
         }
     }
 }
 
-//: define the Network Task Builder
+func JSONResultFromData(data: NSData) -> JSONResult {
+    return data.toJSON()
+}
 
-typealias TaskResultHandler = (result: Result<NSData>) -> Void
+// Network Controller
 
-struct NetworkTaskBuilder {
+public enum NetworkError: ErrorType {
+    case BadResponse
+    case NoData
+    case BadStatusCode(statusCode: Int)
+    case Other
+}
+
+public typealias TaskResult = (result: Result<NSData>) -> Void
+
+public class NetworkController {
     
-    private class SessionDelegate: NSObject, NSURLSessionDelegate, NSURLSessionTaskDelegate {
-        func URLSession(session: NSURLSession, didReceiveChallenge challenge: NSURLAuthenticationChallenge, completionHandler: (NSURLSessionAuthChallengeDisposition, NSURLCredential!) -> Void) {
-            completionHandler(NSURLSessionAuthChallengeDisposition.UseCredential, NSURLCredential(forTrust: challenge.protectionSpace.serverTrust))
+    public let configuration: NSURLSessionConfiguration
+    private let session: NSURLSession
+    
+    public init(configuration: NSURLSessionConfiguration = NSURLSessionConfiguration.defaultSessionConfiguration()) {
+        self.configuration = configuration
+        
+        let delegate = SessionDelegate()
+        let queue = NSOperationQueue.mainQueue()
+        self.session = NSURLSession(configuration: configuration, delegate: delegate, delegateQueue: queue)
+    }
+    
+    deinit {
+        session.finishTasksAndInvalidate()
+    }
+    
+    private class SessionDelegate: NSObject, NSURLSessionDelegate, NSURLSessionTaskDelegate, NSURLSessionDataDelegate {
+        
+        @objc func URLSession(session: NSURLSession, didReceiveChallenge challenge: NSURLAuthenticationChallenge, completionHandler: (NSURLSessionAuthChallengeDisposition, NSURLCredential?) -> Void) {
+            completionHandler(.UseCredential, NSURLCredential(forTrust: challenge.protectionSpace.serverTrust!))
         }
         
-        func URLSession(session: NSURLSession, task: NSURLSessionTask, willPerformHTTPRedirection response: NSHTTPURLResponse, newRequest request: NSURLRequest, completionHandler: (NSURLRequest!) -> Void) {
+        @objc func URLSession(session: NSURLSession, task: NSURLSessionTask, willPerformHTTPRedirection response: NSHTTPURLResponse, newRequest request: NSURLRequest, completionHandler: (NSURLRequest?) -> Void) {
             completionHandler(request)
         }
     }
     
     /**
-    Creates an NSURLSessionTask for the request
+     Creates and starts an NSURLSessionTask for the request.
+     
+     - parameter request: A request object
+     - parameter completion: Called when the task finishes.
+     
+     - returns: An NSURLSessionTask associated with the request
+     */
     
-    :param: request A reqeust object to return a task for
-    :param: completion
-    
-    :returns: An NSURLSessionTask associated with the request
-    */
-    
-    static func task(request:NSURLRequest, result: TaskResultHandler) -> NSURLSessionTask {
+    public func startRequest(request: NSURLRequest, result: TaskResult) {
         
         // handle the task completion job on the main thread
-        let finished: TaskResultHandler = {(taskResult) in
+        let finished: TaskResult = {(taskResult) in
             dispatch_async(dispatch_get_main_queue(), { () -> Void in
                 result(result: taskResult)
             })
         }
         
-        let sessionDelegate = SessionDelegate()
-        let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
-        let session = NSURLSession(configuration: configuration, delegate: sessionDelegate, delegateQueue: NSOperationQueue.mainQueue())
-        
         // return a basic NSURLSession for the request, with basic error handling
         let task = session.dataTaskWithRequest(request, completionHandler: { (data, response, err) -> Void in
-            if (err == nil && data != nil) {
-                if let httpResponse = response as? NSHTTPURLResponse {
-                    switch httpResponse.statusCode {
-                    case 200...204:
-                        finished(result: Result.Success(Box(data)))
-                    default:
-                        let reason = Reason.NoSuccessStatusCode(statusCode: httpResponse.statusCode)
-                        finished(result: Result.Failure(reason))
-                    }
-                } else {
-                    finished(result: Result.Failure(Reason.BadResponse))
+            guard let data = data else {
+                guard let _ = err else {
+                    return finished(result: .Failure(NetworkError.NoData))
                 }
+                
+                return finished(result: .Failure(NetworkError.Other))
             }
-            else if data == nil {
-                finished(result: Result.Failure(Reason.NoData))
+            
+            guard let response = response as? NSHTTPURLResponse else {
+                return finished(result: .Failure(NetworkError.BadResponse))
             }
-            else {
-                finished(result: Result.Failure(Reason.Other(err)))
+            
+            switch response.statusCode {
+            case 200...204:
+                finished(result: .Success(data))
+            default:
+                let error = NetworkError.BadStatusCode(statusCode: response.statusCode)
+                finished(result: .Failure(error))
             }
         })
         
-        return task;
+        task.resume()
     }
 }
 
-//: Define helper function for to create weather object from JSON response
+// Remote API
 
-func createWeatherFromJSON(json: JSON) {
-    let jsonString = json
-    if let weather = Weather.weatherFromJSON(json) {
-        println("created weather: \(weather.name)")
+protocol RemoteAPI {
+    var path: String { get }
+    var baseURL: String { get }
+    
+    func request() -> NSURLRequest
+}
+
+enum GitHubAPI {
+    case Zen
+}
+
+extension GitHubAPI: RemoteAPI {
+    var baseURL: String {
+        return "https://api.github.com"
+    }
+    
+    var path: String {
+        switch self {
+        case .Zen:
+            return "\(baseURL)/zen"
+        }
+    }
+    
+    func request() -> NSURLRequest {
+        let url = NSURL(string: self.path)
+        return NSURLRequest(URL: url!)
     }
 }
 
-//: Create a request, response handler, and make the network request.
+// Use it all
 
-let request = OpenWeatherMap.CityID(seattleID).request()
+let controller = NetworkController()
+let request = GitHubAPI.Zen.request()
 
-let task = NetworkTaskBuilder.task(request, result: { (result) -> Void in
+controller.startRequest(request) { (result) -> Void in
     switch result {
-        case .Success(let data):
-            let jsonResult = data.unbox.toJSON()
-            switch jsonResult {
-                case .Success(let json):
-                    createWeatherFromJSON(json.unbox)
-                case .Failure(let reason):
-                    println("failure found!")
-            }
-        case .Failure(let reason):
-            println("error!")
+    case .Success(let data):
+        let somethign = "test"
+        print("success!")
+    case .Failure(let reason):
+        print("error!")
     }
-})
+}
 
-task.resume()

@@ -12,10 +12,10 @@ tracker.addLocationChangeObserver { (result) -> () in
     case .Success(let location):
         let coordinate = location.physical.coordinate
         let locationString = "\(coordinate.latitude), \(coordinate.longitude)"
-        println("location: \(locationString)")
+        print("location: \(locationString)")
     case .Failure(let reason):
-        println("error")
+        print("error")
     }
 }
 
-XCPSetExecutionShouldContinueIndefinitely(continueIndefinitely: true)
+XCPlaygroundPage.currentPage.needsIndefiniteExecution = true

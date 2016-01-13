@@ -1,5 +1,5 @@
 import Foundation
-import XCPlayground
+//import XCPlayground
 
 func runAsyncTaskInGroup(group: dispatch_group_t) -> Void {
     let configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
@@ -9,7 +9,7 @@ func runAsyncTaskInGroup(group: dispatch_group_t) -> Void {
     dispatch_group_enter(group)
     
     let task = session.dataTaskWithURL(url!) { (_, _, _) in
-        println("finished")
+        print("finished")
         dispatch_group_leave(group)
     }
     
@@ -23,7 +23,7 @@ runAsyncTaskInGroup(group)
 runAsyncTaskInGroup(group)
 
 dispatch_group_notify(group, queue) { () -> Void in
-    println("all done!")
+    print("all done!")
 }
 
-XCPSetExecutionShouldContinueIndefinitely()
+//XCPSetExecutionShouldContinueIndefinitely()

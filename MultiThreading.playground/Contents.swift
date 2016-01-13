@@ -2,14 +2,11 @@
 
 import Cocoa
 import XCPlayground
-
-var error: Optional<NSError>
-
 //: First we define a function do perform some simulated work. In the real world, this could be parsing a complex JSON file, compressing a file to disk, or some other long running task.
 
 func countTo(limit: Int) -> Int {
     var total = 0
-    for i in 1...limit {
+    for _ in 1...limit {
         total += 1
     }
     return total
@@ -23,7 +20,7 @@ let queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0)
 
 let block: dispatch_block_t = { () -> Void in
     countTo(100)
-    println("done with single block")
+    print("done with single block")
 }
 
 dispatch_async(queue, block)
@@ -37,18 +34,18 @@ dispatch_group_enter(group)
 
 dispatch_async(queue, { () -> Void in
     countTo(10)
-    println("finished first grouped task")
+    print("finished first grouped task")
     dispatch_group_leave(group)
 })
 
 dispatch_async(queue, { () -> Void in
     countTo(20)
-    println("finished second grouped task")
+    print("finished second grouped task")
     dispatch_group_leave(group)
 })
 
 dispatch_group_notify(group, queue) { () -> Void in
-    println("finished ALL grouped tasks")
+    print("finished ALL grouped tasks")
 }
 
 //: Queues can have differnt priority levels.
@@ -59,4 +56,5 @@ let background = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0)
 
 //: The playground needs to continue to run indefinitely. It doesn't matter if we put this statement at the top or bottom of the playground. I prefer it at the bottom.
 
-XCPSetExecutionShouldContinueIndefinitely()
+XCPlaygroundPage.currentPage.needsIndefiniteExecution = true
+
