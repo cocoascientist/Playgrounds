@@ -1,15 +1,16 @@
+//: # Networking
+//:
+//: Explore networking
+
 import Foundation
 
-// Result
+//: Define a `Result` protocol and type.
 
 protocol ResultType {
     typealias Value
     
     init(success: Value)
     init(failure: ErrorType)
-    
-    func map<U>(f: (Value) -> U) -> Result<U>
-    func flatMap<U>(f: Value -> Result<U>) -> Result<U>
 }
 
 public enum Result<T>: ResultType {
@@ -25,31 +26,7 @@ public enum Result<T>: ResultType {
     }
 }
 
-extension Result {
-    func map<U>(f: T -> U) -> Result<U> {
-        switch self {
-        case let .Success(value):
-            return Result<U>.Success(f(value))
-        case let .Failure(error):
-            return Result<U>.Failure(error)
-        }
-    }
-    
-    func flatMap<U>(f: T -> Result<U>) -> Result<U> {
-        return Result.flatten(map(f))
-    }
-    
-    static func flatten<U>(result: Result<Result<U>>) -> Result<U> {
-        switch result {
-        case let .Success(innerResult):
-            return innerResult
-        case let .Failure(error):
-            return Result<U>.Failure(error)
-        }
-    }
-}
-
-// NSData+JSON
+//: Create a simple mechanism for handling JSON using Foundation APIs and returning a `Result`.
 
 public enum JSONError: ErrorType {
     case BadJSON
@@ -76,7 +53,7 @@ func JSONResultFromData(data: NSData) -> JSONResult {
     return data.toJSON()
 }
 
-// Network Controller
+//: Create a Network Controller
 
 public enum NetworkError: ErrorType {
     case BadResponse
@@ -114,6 +91,11 @@ public class NetworkController {
             completionHandler(request)
         }
     }
+}
+
+//: Create an function that accepts an `NSURLRequest` and returns an associated `TaskResult`.
+
+extension NetworkController {
     
     /**
      Creates and starts an NSURLSessionTask for the request.
@@ -160,7 +142,7 @@ public class NetworkController {
     }
 }
 
-// Remote API
+//: Model the remote API using a protocol and enum.
 
 protocol RemoteAPI {
     var path: String { get }
@@ -191,7 +173,7 @@ extension GitHubAPI: RemoteAPI {
     }
 }
 
-// Use it all
+//: Use everything together.
 
 let controller = NetworkController()
 let request = GitHubAPI.Zen.request()

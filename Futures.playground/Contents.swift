@@ -1,12 +1,18 @@
-//: Futures
+//: # Futures
+//:
+//: Explores an implemention of the `Future` type based on the presentation by Javier Soto titled [Back to the Futures](https://realm.io/news/swift-summit-javier-soto-futures/).
 
 import Foundation
 import XCPlayground
+
+//: First define a `Result` type.
 
 enum Result<T> {
     case Success(T)
     case Failure(ErrorType)
 }
+
+//: Then define the `Future` type. A `struct` is used because...
 
 struct Future<T> {
     typealias ResultType = Result<T>
@@ -31,6 +37,8 @@ struct Future<T> {
     }
 }
 
+//: Afterwards, define some additional types for working with `Result` and `Future`.
+
 typealias TaskResult = Result<NSData>
 typealias TaskFuture = Future<NSData>
 typealias TaskCompletion = (NSData?, NSURLResponse?, NSError?) -> Void
@@ -42,6 +50,8 @@ enum TaskError: ErrorType {
     case BadStatusCode(Int)
     case Other(NSError)
 }
+
+//: Build a simple `NetworkController` for returning `TaskFuture` types associated with some `NSURLRequest`.
 
 struct NetworkController {
 
@@ -90,6 +100,8 @@ struct NetworkController {
     }
 }
 
+//: Use the controller to make a simple network request. Log the bytes received or an error.
+
 let controller = NetworkController()
 let request = NSURLRequest(URL: NSURL(string: "https://www.apple.com")!)
 
@@ -103,5 +115,7 @@ future.start { (result) -> () in
         print("failure: \(error)")
     }
 }
+
+//: Run the playground forever.
 
 XCPlaygroundPage.currentPage.needsIndefiniteExecution = true

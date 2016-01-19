@@ -5,6 +5,7 @@
 //: First import `UIKit`
 
 import UIKit
+import XCPlayground
 
 //: Phase struct
 
@@ -64,3 +65,6 @@ let dataSource = PhasesDataSource()
 tableView.dataSource = dataSource
 
 tableView.reloadData()
+
+XCPlaygroundPage.currentPage.liveView = tableView
+XCPlaygroundPage.currentPage.needsIndefiniteExecution = true
